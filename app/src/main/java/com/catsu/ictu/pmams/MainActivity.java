@@ -50,6 +50,8 @@ public class MainActivity extends Activity {
         progressBar = findViewById(R.id.progressBar);
         errorPanel = findViewById(R.id.errorPanel);
         errorMessage = findViewById(R.id.errorMessage);
+        TextView appVersion = findViewById(R.id.appVersion);
+        appVersion.setText(getString(R.string.app_version_format, BuildConfig.VERSION_NAME));
         Button retryButton = findViewById(R.id.retryButton);
         retryButton.setOnClickListener(view -> loadPortal());
 
@@ -292,6 +294,22 @@ public class MainActivity extends Activity {
             }
             filePathCallback = callback;
 
+            // A capture-enabled input (for example, the gallery's Take Photo
+            // control) should open the device camera immediately. Keeping the
+            // camera intent separate from the document chooser avoids making
+            // users pick Camera again on Android WebView.
+            if (params.isCaptureEnabled()) {
+                Intent cameraIntent = createCameraIntent();
+                if (cameraIntent != null) {
+                    try {
+                        startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST);
+                        return true;
+                    } catch (ActivityNotFoundException ignored) {
+                        // Fall through to the regular document chooser.
+                    }
+                }
+            }
+
             String mimeType = "*/*";
             String[] acceptTypes = params.getAcceptTypes();
             if (acceptTypes != null) {
@@ -310,12 +328,6 @@ public class MainActivity extends Activity {
                     params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
 
             Intent chooser = Intent.createChooser(contentIntent, getString(R.string.file_chooser_title));
-            if (params.isCaptureEnabled()) {
-                Intent cameraIntent = createCameraIntent();
-                if (cameraIntent != null) {
-                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
-                }
-            }
 
             try {
                 startActivityForResult(chooser, FILE_CHOOSER_REQUEST);

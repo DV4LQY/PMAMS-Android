@@ -8,6 +8,16 @@ val configuredBaseUrl = providers.gradleProperty("baseUrl")
 val escapedBaseUrl = configuredBaseUrl
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
+val configuredVersionCode = providers.gradleProperty("appVersionCode")
+    .orElse("1")
+    .get()
+    .toIntOrNull()
+    ?: error("appVersionCode must be a positive integer")
+val configuredVersionName = providers.gradleProperty("appVersionName")
+    .orElse("1.0.0")
+    .get()
+    .trim()
+    .ifEmpty { error("appVersionName must not be empty") }
 
 android {
     namespace = "com.catsu.ictu.pmams"
@@ -17,8 +27,8 @@ android {
         applicationId = "com.catsu.ictu.pmams"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = configuredVersionCode
+        versionName = configuredVersionName
 
         buildConfigField("String", "BASE_URL", "\"$escapedBaseUrl\"")
     }

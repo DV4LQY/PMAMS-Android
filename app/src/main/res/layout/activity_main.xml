@@ -39,6 +39,14 @@
             android:src="@drawable/ictu_logo" />
 
         <TextView
+            android:id="@+id/appVersion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/errorMessage"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

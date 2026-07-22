@@ -28,4 +28,16 @@ Open `android-app` in Android Studio and run **Build > Build APK(s)**, or use Gr
 
 The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Version control
+
+The version is defined in `gradle.properties` with `appVersionCode` and `appVersionName`.
+Increase the code for every published build and update the human-readable name as needed:
+
+```powershell
+.\gradlew.bat assembleDebug '-PappVersionCode=2' '-PappVersionName=1.1.0'
+```
+
+The version name is also shown on the app connection-error screen. Release builds should
+use the same properties together with the project's signing configuration.
+
 The wrapper includes native WebView handling for JavaScript, cookies, back navigation, external links, file uploads, equipment photos, QR camera permission, and downloads.
