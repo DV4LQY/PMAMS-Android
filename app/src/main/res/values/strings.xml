@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">PMAMS</string>
+    <string name="loading">Loading PMAMS…</string>
+    <string name="connection_error">Unable to connect to PMAMS. Check the server URL and network connection.</string>
+    <string name="retry">Retry</string>
+    <string name="file_chooser_title">Select a file</string>
+</resources>
