@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
     private PermissionRequest pendingPermissionRequest;
+    private boolean fallbackAttempted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,14 +87,15 @@ public class MainActivity extends Activity {
     }
 
     private void loadPortal() {
-        String url = BuildConfig.BASE_URL;
-        if (!url.endsWith("/")) {
-            url += "/";
-        }
+        fallbackAttempted = false;
+        loadPortalUrl(BuildConfig.BASE_URL);
+    }
+
+    private void loadPortalUrl(String url) {
         errorPanel.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.VISIBLE);
-        webView.loadUrl(url);
+        webView.loadUrl(url.trim());
     }
 
     private void showError(String message) {
@@ -104,11 +106,59 @@ public class MainActivity extends Activity {
     }
 
     private boolean isPortalUrl(Uri uri) {
-        Uri base = Uri.parse(BuildConfig.BASE_URL);
         String scheme = uri.getScheme();
         return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                && base.getHost() != null
-                && base.getHost().equalsIgnoreCase(uri.getHost());
+                && isAllowedPortalHost(uri.getHost());
+    }
+
+    private boolean isAllowedPortalHost(String host) {
+        if (host == null) {
+            return false;
+        }
+
+        Uri base = Uri.parse(BuildConfig.BASE_URL);
+        Uri fallback = Uri.parse(BuildConfig.FALLBACK_URL);
+        return (base.getHost() != null && base.getHost().equalsIgnoreCase(host))
+                || (fallback.getHost() != null && fallback.getHost().equalsIgnoreCase(host));
+    }
+
+    private Uri buildFallbackUri(String failedUrl) {
+        Uri failed = Uri.parse(failedUrl);
+        Uri fallback = Uri.parse(BuildConfig.FALLBACK_URL);
+        Uri.Builder builder = fallback.buildUpon();
+        String failedPath = failed.getPath();
+
+        // Preserve the route that failed when the app is already inside the
+        // portal. For the initial root request, keep the configured fallback
+        // login route instead.
+        if (failedPath != null && !failedPath.isEmpty() && !"/".equals(failedPath)) {
+            builder.path(failedPath);
+        }
+        if (failed.getEncodedQuery() != null) {
+            builder.encodedQuery(failed.getEncodedQuery());
+        }
+        if (failed.getFragment() != null) {
+            builder.fragment(failed.getFragment());
+        }
+        return builder.build();
+    }
+
+    private boolean tryHostedFallback(String failedUrl) {
+        if (fallbackAttempted || BuildConfig.FALLBACK_URL.trim().isEmpty()) {
+            return false;
+        }
+
+        Uri failed = Uri.parse(failedUrl);
+        Uri fallback = buildFallbackUri(failedUrl);
+        if (failed.getHost() == null
+                || fallback.getHost() == null
+                || failed.getHost().equalsIgnoreCase(fallback.getHost())) {
+            return false;
+        }
+
+        fallbackAttempted = true;
+        loadPortalUrl(fallback.toString());
+        return true;
     }
 
     private void openExternal(Uri uri) {
@@ -269,7 +319,18 @@ public class MainActivity extends Activity {
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (request.isForMainFrame()) {
-                showError(getString(R.string.connection_error));
+                if (!tryHostedFallback(request.getUrl().toString())) {
+                    showError(getString(R.string.connection_error));
+                }
+            }
+        }
+
+        @Override
+        public void onReceivedHttpError(WebView view, WebResourceRequest request, android.webkit.WebResourceResponse errorResponse) {
+            if (request.isForMainFrame() && errorResponse.getStatusCode() >= 400) {
+                if (!tryHostedFallback(request.getUrl().toString())) {
+                    showError(getString(R.string.connection_error));
+                }
             }
         }
     }

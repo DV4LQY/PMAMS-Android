@@ -4,16 +4,24 @@ This is a lightweight Android WebView client for the existing PMAMS Laravel syst
 
 ## Configure the server URL
 
-The default URL targets the Android emulator and a Laravel server running on the development computer:
+The default build tries the local PMAMS server first:
 
 ```text
-http://10.0.2.2:8000/
+http://192.168.171.9/pmams/public/login
 ```
 
-For a physical phone, use the computer's LAN IP and make sure the phone and computer are on the same network:
+If the local server cannot be reached, the app automatically retries the hosted PMAMS URL:
+
+```text
+http://pmams.catsu.edu.ph/pmams/public/login
+```
+
+You can override either endpoint at build time. For a physical phone, use the computer's LAN IP and make sure the phone and computer are on the same network:
 
 ```powershell
-.\gradlew.bat assembleDebug -PbaseUrl=http://192.168.1.25/pms_systemv2/public/
+.\gradlew.bat assembleDebug `
+    -PbaseUrl=http://192.168.1.25/pms_systemv2/public/login `
+    -PfallbackUrl=http://pmams.catsu.edu.ph/pmams/public/login
 ```
 
 Use an HTTPS URL for production deployments. Cleartext HTTP is enabled only so local Laragon/Laravel testing works.

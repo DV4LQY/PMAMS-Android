@@ -3,9 +3,15 @@ plugins {
 }
 
 val configuredBaseUrl = providers.gradleProperty("baseUrl")
-    .orElse("http://10.0.2.2:8000/")
+    .orElse("http://192.168.171.9/pmams/public/login")
     .get()
 val escapedBaseUrl = configuredBaseUrl
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+val configuredFallbackUrl = providers.gradleProperty("fallbackUrl")
+    .orElse("http://pmams.catsu.edu.ph/pmams/public/login")
+    .get()
+val escapedFallbackUrl = configuredFallbackUrl
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
 val configuredVersionCode = providers.gradleProperty("appVersionCode")
@@ -25,12 +31,13 @@ android {
 
     defaultConfig {
         applicationId = "com.catsu.ictu.pmams"
-        minSdk = 26
+        minSdk = 23
         targetSdk = 35
         versionCode = configuredVersionCode
         versionName = configuredVersionName
 
         buildConfigField("String", "BASE_URL", "\"$escapedBaseUrl\"")
+        buildConfigField("String", "FALLBACK_URL", "\"$escapedFallbackUrl\"")
     }
 
     buildFeatures {
