@@ -4,27 +4,29 @@ This is a lightweight Android WebView client for the existing PMAMS Laravel syst
 
 ## Configure the server URL
 
-The default build tries the local PMAMS server first:
+The default build tries the HTTPS local PMAMS server first:
 
 ```text
-http://192.168.171.9/pmams/public/login
+https://192.168.171.9/pmams/public
 ```
 
-If the local server cannot be reached, the app automatically retries the hosted PMAMS URL:
+If the local server cannot be reached, the app automatically switches to the hosted PMAMS public entry point:
 
 ```text
-http://pmams.catsu.edu.ph/pmams/public/login
+https://pmams.catsu.edu.ph/pmams/public
 ```
+
+The local URL always has priority. Once login or the dashboard finishes loading, connection monitoring stays active every 30 seconds. If the active endpoint fails, the app switches to the other URL after a 20-second timeout; while hosted is active, it also checks the local URL and switches back as soon as local responds. Both directions can switch without a cooldown. A popup notification shows the source and destination URLs, then the app automatically opens the swapped URL.
 
 You can override either endpoint at build time. For a physical phone, use the computer's LAN IP and make sure the phone and computer are on the same network:
 
 ```powershell
 .\gradlew.bat assembleDebug `
-    -PbaseUrl=http://192.168.1.25/pms_systemv2/public/login `
-    -PfallbackUrl=http://pmams.catsu.edu.ph/pmams/public/login
+    -PbaseUrl=https://192.168.1.25/pms_systemv2/public/login `
+    -PfallbackUrl=https://pmams.catsu.edu.ph/pmams/public
 ```
 
-Use an HTTPS URL for production deployments. Cleartext HTTP is enabled only so local Laragon/Laravel testing works.
+The app upgrades configured PMAMS `http://` links to `https://`, blocks cleartext traffic, and proceeds past SSL certificate warnings for the configured PMAMS hosts. Use a valid HTTPS certificate when possible; the bypass is intended for private/self-signed PMAMS deployments.
 
 ## Build the APK
 

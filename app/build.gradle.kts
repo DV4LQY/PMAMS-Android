@@ -3,13 +3,13 @@ plugins {
 }
 
 val configuredBaseUrl = providers.gradleProperty("baseUrl")
-    .orElse("http://192.168.171.9/pmams/public/login")
+    .orElse("https://192.168.171.9/pmams/public")
     .get()
 val escapedBaseUrl = configuredBaseUrl
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
 val configuredFallbackUrl = providers.gradleProperty("fallbackUrl")
-    .orElse("http://pmams.catsu.edu.ph/pmams/public/login")
+    .orElse("https://pmams.catsu.edu.ph/pmams/public")
     .get()
 val escapedFallbackUrl = configuredFallbackUrl
     .replace("\\", "\\\\")

@@ -1,6 +1,14 @@
 <resources>
     <string name="app_name">PMAMS</string>
     <string name="app_version_format">Version %1$s</string>
+    <string name="connecting_to_pmams">Connecting to PMAMS</string>
+    <string name="switching_connection">Switching connection</string>
+    <string name="switching_to_local">Local server found. Switching to local connection</string>
+    <string name="connection_switch_title">Switching connection</string>
+    <string name="connection_lost_waiting">Connection lost. Switching in 60 seconds.</string>
+    <string name="connection_switch_notice">Connection switch
+From: %1$s
+To: %2$s</string>
     <string name="loading">Loading PMAMS…</string>
     <string name="connection_error">Unable to connect to PMAMS. Check the server URL and network connection.</string>
     <string name="retry">Retry</string>
