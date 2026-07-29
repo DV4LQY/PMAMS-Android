@@ -48,11 +48,11 @@ import java.security.cert.X509Certificate;
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 2101;
     private static final int MEDIA_PERMISSION_REQUEST = 2102;
-    private static final long CONNECTION_TIMEOUT_MS = 60_000L;
-    private static final long CONNECTION_CHECK_INTERVAL_MS = 60_000L;
+    private static final long CONNECTION_DECISION_DELAY_MS = 60_000L;
+    private static final long CONNECTION_MONITOR_INTERVAL_MS = 120_000L;
 
     private final Handler connectionHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService localHealthExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService connectionHealthExecutor = Executors.newSingleThreadExecutor();
     private WebView webView;
     private AlertDialog connectionSwitchDialog;
     private ProgressBar progressBar;
@@ -64,12 +64,11 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
     private PermissionRequest pendingPermissionRequest;
-    private Runnable connectionTimeoutRunnable;
+    private Runnable connectionDecisionRunnable;
     private Runnable connectionMonitorRunnable;
     private String connectionAttemptUrl;
     private boolean mainFrameConnectionFailed;
-    private boolean localProbeInProgress;
-    private boolean activeProbeInProgress;
+    private boolean connectionHealthCheckInProgress;
     private boolean pageLoaded;
 
     @Override
@@ -127,7 +126,8 @@ public class MainActivity extends Activity {
 
     private void loadPortalUrl(String url, int statusMessageResId) {
         String httpsUrl = forceHttpsUrl(url);
-        cancelConnectionTimeout();
+        cancelConnectionDecision();
+        dismissConnectionDecisionDialog();
         connectionAttemptUrl = httpsUrl;
         mainFrameConnectionFailed = false;
         pageLoaded = false;
@@ -137,14 +137,20 @@ public class MainActivity extends Activity {
         errorPanel.setVisibility(View.GONE);
         webView.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.VISIBLE);
-        connectionTimeoutRunnable = () -> switchConnection(connectionAttemptUrl);
-        connectionHandler.postDelayed(connectionTimeoutRunnable, CONNECTION_TIMEOUT_MS);
+        connectionDecisionRunnable = () -> {
+            connectionDecisionRunnable = null;
+            if (httpsUrl.equals(connectionAttemptUrl) && !pageLoaded) {
+                showConnectionDecisionDialog(httpsUrl);
+            }
+        };
+        connectionHandler.postDelayed(connectionDecisionRunnable, CONNECTION_DECISION_DELAY_MS);
         webView.stopLoading();
         webView.loadUrl(httpsUrl);
     }
 
     private void showError(String message) {
-        cancelConnectionTimeout();
+        cancelConnectionDecision();
+        pageLoaded = false;
         connectionStatusPanel.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
         webView.setVisibility(View.GONE);
@@ -152,11 +158,18 @@ public class MainActivity extends Activity {
         errorPanel.setVisibility(View.VISIBLE);
     }
 
-    private void cancelConnectionTimeout() {
-        if (connectionTimeoutRunnable != null) {
-            connectionHandler.removeCallbacks(connectionTimeoutRunnable);
-            connectionTimeoutRunnable = null;
+    private void cancelConnectionDecision() {
+        if (connectionDecisionRunnable != null) {
+            connectionHandler.removeCallbacks(connectionDecisionRunnable);
+            connectionDecisionRunnable = null;
         }
+    }
+
+    private void dismissConnectionDecisionDialog() {
+        if (connectionSwitchDialog != null && connectionSwitchDialog.isShowing()) {
+            connectionSwitchDialog.dismiss();
+        }
+        connectionSwitchDialog = null;
     }
 
     private void markConnectionLost(String failedUrl) {
@@ -169,15 +182,21 @@ public class MainActivity extends Activity {
         connectionStatusPanel.setVisibility(View.VISIBLE);
 
         // A later navigation can fail after the original page has already
-        // loaded, so start a fresh timeout when no attempt is active.
-        if (connectionTimeoutRunnable == null) {
-            connectionTimeoutRunnable = () -> switchConnection(displayUrl);
-            connectionHandler.postDelayed(connectionTimeoutRunnable, CONNECTION_TIMEOUT_MS);
+        // loaded, so start a fresh decision window when no attempt is active.
+        if (connectionDecisionRunnable == null
+                && (connectionSwitchDialog == null || !connectionSwitchDialog.isShowing())) {
+            connectionDecisionRunnable = () -> {
+                connectionDecisionRunnable = null;
+                if (connectionAttemptUrl != null
+                        && connectionAttemptUrl.equals(displayUrl)) {
+                    showConnectionDecisionDialog(displayUrl);
+                }
+            };
+            connectionHandler.postDelayed(connectionDecisionRunnable, CONNECTION_DECISION_DELAY_MS);
         }
     }
 
-    private void switchConnection(String failedUrl) {
-        connectionTimeoutRunnable = null;
+    private void showConnectionDecisionDialog(String failedUrl) {
         String sourceUrl = connectionAttemptUrl == null
                 ? forceHttpsUrl(failedUrl)
                 : connectionAttemptUrl;
@@ -187,44 +206,19 @@ public class MainActivity extends Activity {
             return;
         }
 
-        showConnectionSwitchNotification(sourceUrl, targetUrl);
-        loadPortalUrl(targetUrl, R.string.switching_connection);
-    }
+        connectionStatusMessage.setText(R.string.connection_lost_waiting);
+        connectionStatusUrl.setText(sourceUrl);
+        connectionStatusPanel.setVisibility(View.VISIBLE);
 
-    private String getAlternateConnectionUrl(String failedUrl) {
-        Uri failed = Uri.parse(forceHttpsUrl(failedUrl));
-        Uri local = Uri.parse(forceHttpsUrl(BuildConfig.BASE_URL));
-        Uri hosted = Uri.parse(forceHttpsUrl(BuildConfig.FALLBACK_URL));
-        String failedHost = failed.getHost();
-
-        if (failedHost != null && local.getHost() != null
-                && local.getHost().equalsIgnoreCase(failedHost)) {
-            return hosted.toString();
-        }
-        if (failedHost != null && hosted.getHost() != null
-                && hosted.getHost().equalsIgnoreCase(failedHost)) {
-            return local.toString();
-        }
-        return null;
-    }
-
-    private boolean isSameConnectionHost(String firstUrl, String secondUrl) {
-        Uri first = Uri.parse(forceHttpsUrl(firstUrl));
-        Uri second = Uri.parse(forceHttpsUrl(secondUrl));
-        return first.getHost() != null && first.getHost().equalsIgnoreCase(second.getHost());
-    }
-
-    private void showConnectionSwitchNotification(String sourceUrl, String targetUrl) {
-        String message = getString(R.string.connection_switch_notice, sourceUrl, targetUrl);
-        if (connectionSwitchDialog != null && connectionSwitchDialog.isShowing()) {
-            connectionSwitchDialog.dismiss();
-        }
-
+        String message = getString(R.string.connection_switch_prompt, sourceUrl, targetUrl);
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.connection_switch_title)
                 .setMessage(message)
-                .setPositiveButton(android.R.string.ok, null)
-                .setCancelable(true)
+                .setNegativeButton(R.string.continue_connection,
+                        (ignored, which) -> loadPortalUrl(sourceUrl, R.string.continuing_connection))
+                .setPositiveButton(R.string.switch_connection,
+                        (ignored, which) -> loadPortalUrl(targetUrl, R.string.switching_connection))
+                .setCancelable(false)
                 .create();
         connectionSwitchDialog = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -233,11 +227,37 @@ public class MainActivity extends Activity {
             }
         });
         dialog.show();
-        connectionHandler.postDelayed(() -> {
-            if (dialog.isShowing()) {
-                dialog.dismiss();
+    }
+
+    private void showDetectedConnectionDialog(String currentUrl, String alternateUrl, int statusMessageResId) {
+        if (connectionSwitchDialog != null && connectionSwitchDialog.isShowing()) {
+            return;
+        }
+
+        connectionStatusMessage.setText(statusMessageResId);
+        connectionStatusUrl.setText(currentUrl);
+        connectionStatusPanel.setVisibility(View.VISIBLE);
+
+        String message = getString(R.string.connection_detected_prompt, currentUrl, alternateUrl);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.network_switch_detected_title)
+                .setMessage(message)
+                .setNegativeButton(R.string.continue_connection,
+                        (ignored, which) -> {
+                            connectionStatusPanel.setVisibility(View.GONE);
+                            progressBar.setVisibility(View.GONE);
+                        })
+                .setPositiveButton(R.string.switch_connection,
+                        (ignored, which) -> loadPortalUrl(alternateUrl, R.string.switching_connection))
+                .setCancelable(false)
+                .create();
+        connectionSwitchDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (connectionSwitchDialog == dialog) {
+                connectionSwitchDialog = null;
             }
-        }, 3_000L);
+        });
+        dialog.show();
     }
 
     private void startConnectionMonitoring() {
@@ -248,79 +268,75 @@ public class MainActivity extends Activity {
         connectionMonitorRunnable = new Runnable() {
             @Override
             public void run() {
-                if (pageLoaded && connectionAttemptUrl != null) {
-                    probeActiveConnection();
+                if (pageLoaded && connectionAttemptUrl != null && !mainFrameConnectionFailed) {
+                    checkConnectionHealth();
                 }
-                if (pageLoaded && !isLocalConnectionActive()) {
-                    probeLocalConnection();
+                if (connectionMonitorRunnable != null) {
+                    connectionHandler.postDelayed(this, CONNECTION_MONITOR_INTERVAL_MS);
                 }
-                connectionHandler.postDelayed(this, CONNECTION_CHECK_INTERVAL_MS);
             }
         };
-        connectionHandler.postDelayed(connectionMonitorRunnable, CONNECTION_CHECK_INTERVAL_MS);
+        connectionHandler.postDelayed(connectionMonitorRunnable, CONNECTION_MONITOR_INTERVAL_MS);
     }
 
-    private boolean isLocalConnectionActive() {
-        if (connectionAttemptUrl == null) {
+    private void checkConnectionHealth() {
+        if (connectionHealthCheckInProgress || connectionAttemptUrl == null) {
+            return;
+        }
+
+        String activeUrl = connectionAttemptUrl;
+        String localUrl = forceHttpsUrl(BuildConfig.BASE_URL);
+        connectionHealthCheckInProgress = true;
+        connectionHealthExecutor.execute(() -> {
+            boolean localReachable = isUrlReachable(localUrl);
+            boolean activeReachable = isLocalConnectionUrl(activeUrl)
+                    ? localReachable
+                    : isUrlReachable(activeUrl);
+
+            connectionHandler.post(() -> {
+                connectionHealthCheckInProgress = false;
+                if (!pageLoaded || mainFrameConnectionFailed
+                        || !activeUrl.equals(connectionAttemptUrl)) {
+                    return;
+                }
+
+                // Local is always preferred, but the app must ask before
+                // changing networks so the user remains in control.
+                if (!isLocalConnectionUrl(activeUrl) && localReachable) {
+                    showDetectedConnectionDialog(
+                            activeUrl,
+                            localUrl,
+                            R.string.local_connection_detected
+                    );
+                    return;
+                }
+
+                if (!activeReachable) {
+                    String alternateUrl = getAlternateConnectionUrl(activeUrl);
+                    if (alternateUrl == null) {
+                        markConnectionLost(activeUrl);
+                        return;
+                    }
+
+                    showDetectedConnectionDialog(
+                            activeUrl,
+                            alternateUrl,
+                            R.string.alternate_connection_detected
+                    );
+                }
+            });
+        });
+    }
+
+    private boolean isLocalConnectionUrl(String url) {
+        if (url == null) {
             return false;
         }
 
-        Uri active = Uri.parse(connectionAttemptUrl);
+        Uri active = Uri.parse(forceHttpsUrl(url));
         Uri local = Uri.parse(forceHttpsUrl(BuildConfig.BASE_URL));
         return active.getHost() != null && local.getHost() != null
                 && active.getHost().equalsIgnoreCase(local.getHost());
-    }
-
-    private void probeLocalConnection() {
-        if (localProbeInProgress) {
-            return;
-        }
-
-        localProbeInProgress = true;
-        String localUrl = forceHttpsUrl(BuildConfig.BASE_URL);
-        localHealthExecutor.execute(() -> {
-            boolean reachable = isUrlReachable(localUrl);
-            connectionHandler.post(() -> {
-                localProbeInProgress = false;
-                if (reachable && pageLoaded && !isLocalConnectionActive()) {
-                    String sourceUrl = connectionAttemptUrl == null
-                            ? forceHttpsUrl(BuildConfig.FALLBACK_URL)
-                            : connectionAttemptUrl;
-                    showConnectionSwitchNotification(sourceUrl, localUrl);
-                    loadPortalUrl(localUrl, R.string.switching_to_local);
-                }
-            });
-        });
-    }
-
-    private void probeActiveConnection() {
-        if (activeProbeInProgress || mainFrameConnectionFailed) {
-            return;
-        }
-
-        String checkedUrl = connectionAttemptUrl;
-        activeProbeInProgress = true;
-        localHealthExecutor.execute(() -> {
-            boolean reachable = isUrlReachable(checkedUrl);
-            connectionHandler.post(() -> {
-                activeProbeInProgress = false;
-                if (!pageLoaded || !checkedUrl.equals(connectionAttemptUrl)) {
-                    return;
-                }
-
-                if (reachable) {
-                    if (mainFrameConnectionFailed) {
-                        mainFrameConnectionFailed = false;
-                        cancelConnectionTimeout();
-                        connectionStatusPanel.setVisibility(View.GONE);
-                        progressBar.setVisibility(View.GONE);
-                    }
-                    return;
-                }
-
-                markConnectionLost(checkedUrl);
-            });
-        });
     }
 
     private boolean isUrlReachable(String url) {
@@ -364,6 +380,29 @@ public class MainActivity extends Activity {
                 connection.disconnect();
             }
         }
+    }
+
+    private String getAlternateConnectionUrl(String failedUrl) {
+        Uri failed = Uri.parse(forceHttpsUrl(failedUrl));
+        Uri local = Uri.parse(forceHttpsUrl(BuildConfig.BASE_URL));
+        Uri hosted = Uri.parse(forceHttpsUrl(BuildConfig.FALLBACK_URL));
+        String failedHost = failed.getHost();
+
+        if (failedHost != null && local.getHost() != null
+                && local.getHost().equalsIgnoreCase(failedHost)) {
+            return hosted.toString();
+        }
+        if (failedHost != null && hosted.getHost() != null
+                && hosted.getHost().equalsIgnoreCase(failedHost)) {
+            return local.toString();
+        }
+        return null;
+    }
+
+    private boolean isSameConnectionHost(String firstUrl, String secondUrl) {
+        Uri first = Uri.parse(forceHttpsUrl(firstUrl));
+        Uri second = Uri.parse(forceHttpsUrl(secondUrl));
+        return first.getHost() != null && first.getHost().equalsIgnoreCase(second.getHost());
     }
 
     private boolean isPortalUrl(Uri uri) {
@@ -517,14 +556,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        cancelConnectionTimeout();
+        cancelConnectionDecision();
         if (connectionMonitorRunnable != null) {
             connectionHandler.removeCallbacks(connectionMonitorRunnable);
+            connectionMonitorRunnable = null;
         }
-        localHealthExecutor.shutdownNow();
-        if (connectionSwitchDialog != null && connectionSwitchDialog.isShowing()) {
-            connectionSwitchDialog.dismiss();
-        }
+        connectionHealthExecutor.shutdownNow();
+        dismissConnectionDecisionDialog();
         if (webView != null) {
             webView.stopLoading();
             webView.setWebChromeClient(null);
@@ -568,7 +606,7 @@ public class MainActivity extends Activity {
             if (!mainFrameConnectionFailed && isCurrentConnectionHost(url)) {
                 pageLoaded = true;
                 startConnectionMonitoring();
-                cancelConnectionTimeout();
+                cancelConnectionDecision();
                 connectionStatusPanel.setVisibility(View.GONE);
                 progressBar.setVisibility(View.GONE);
             }

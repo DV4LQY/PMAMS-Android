@@ -3,12 +3,28 @@
     <string name="app_version_format">Version %1$s</string>
     <string name="connecting_to_pmams">Connecting to PMAMS</string>
     <string name="switching_connection">Switching connection</string>
-    <string name="switching_to_local">Local server found. Switching to local connection</string>
-    <string name="connection_switch_title">Switching connection</string>
-    <string name="connection_lost_waiting">Connection lost. Switching in 60 seconds.</string>
-    <string name="connection_switch_notice">Connection switch
-From: %1$s
-To: %2$s</string>
+    <string name="switching_to_local">Local connection detected. Returning to local</string>
+    <string name="continuing_connection">Continuing with current connection</string>
+    <string name="connection_switch_title">Connection unavailable</string>
+    <string name="network_switch_detected_title">Network connection detected</string>
+    <string name="local_connection_detected">Local network detected. Choose an action</string>
+    <string name="alternate_connection_detected">Alternate network detected. Choose an action</string>
+    <string name="connection_lost_waiting">This connection has not responded for 60 seconds.</string>
+    <string name="connection_switch_prompt">PMAMS could not reach the current connection:
+%1$s
+
+Continue trying this connection, or switch to:
+%2$s</string>
+    <string name="continue_connection">Continue</string>
+    <string name="connection_detected_prompt">A different PMAMS connection is available.
+Current connection:
+%1$s
+
+Available connection:
+%2$s
+
+No network switch will happen until you choose an action.</string>
+    <string name="switch_connection">Switch network</string>
     <string name="loading">Loading PMAMS…</string>
     <string name="connection_error">Unable to connect to PMAMS. Check the server URL and network connection.</string>
     <string name="retry">Retry</string>

@@ -10,20 +10,20 @@ The default build tries the HTTPS local PMAMS server first:
 https://192.168.171.9/pmams/public
 ```
 
-If the local server cannot be reached, the app automatically switches to the hosted PMAMS public entry point:
+If the local server cannot be reached, the app offers the hosted PMAMS login as the alternate connection:
 
 ```text
-https://pmams.catsu.edu.ph/pmams/public
+https://pmams.catsu.edu.ph/login
 ```
 
-The local URL always has priority. Once login or the dashboard finishes loading, connection monitoring stays active every 30 seconds. If the active endpoint fails, the app switches to the other URL after a 20-second timeout; while hosted is active, it also checks the local URL and switches back as soon as local responds. Both directions can switch without a cooldown. A popup notification shows the source and destination URLs, then the app automatically opens the swapped URL.
+The local URL always has priority. After the portal loads, the app checks the local endpoint and active endpoint every two minutes. If another network is detected or the active URL becomes unavailable, the app asks whether to switch networks or continue; it never changes networks without confirmation. If the initial local or hosted load has not responded after 60 seconds, it also asks whether to continue trying the current connection or switch to the other URL.
 
 You can override either endpoint at build time. For a physical phone, use the computer's LAN IP and make sure the phone and computer are on the same network:
 
 ```powershell
 .\gradlew.bat assembleDebug `
     -PbaseUrl=https://192.168.1.25/pms_systemv2/public/login `
-    -PfallbackUrl=https://pmams.catsu.edu.ph/pmams/public
+    -PfallbackUrl=https://pmams.catsu.edu.ph/login
 ```
 
 The app upgrades configured PMAMS `http://` links to `https://`, blocks cleartext traffic, and proceeds past SSL certificate warnings for the configured PMAMS hosts. Use a valid HTTPS certificate when possible; the bypass is intended for private/self-signed PMAMS deployments.
